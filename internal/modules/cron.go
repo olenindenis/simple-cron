@@ -1,0 +1,67 @@
+package modules
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os/exec"
+	"strings"
+	"time"
+
+	"cron/internal/services"
+	"github.com/robfig/cron/v3"
+	"go.uber.org/fx"
+)
+
+func Module(moduleName, crontabName string) fx.Option {
+	return fx.Module(moduleName,
+		fx.Supply(crontabName),
+		fx.Provide(
+			fx.Annotate(context.Background, fx.As(new(context.Context))),
+			services.NewCrontabService,
+			cron.New,
+		),
+		fx.Invoke(func(
+			ctx context.Context,
+			lifecycle fx.Lifecycle,
+			service services.CrontabService,
+			scheduler *cron.Cron,
+		) error {
+			lifecycle.Append(fx.Hook{
+				OnStart: func(_ context.Context) error {
+					log.Println("Start jobs")
+
+					job, err := service.Parse()
+					if err != nil {
+						return err
+					}
+					if _, err = scheduler.AddFunc(job.Spec, func() {
+						log.Println(strings.Join(job.Command, " "))
+
+						if err = exec.Command(job.Command[0], job.Command[1:]...).Run(); err != nil {
+							log.Println(fmt.Errorf("run: %w", err))
+						}
+					}); err != nil {
+						return fmt.Errorf("cron AddFunc %w", err)
+					}
+
+					scheduler.Start()
+
+					return nil
+				},
+				OnStop: func(ctx context.Context) error {
+					log.Println("Stop all jobs")
+
+					_, shutdownRelease := context.WithTimeout(ctx, 30*time.Second)
+					defer shutdownRelease()
+
+					scheduler.Stop()
+
+					return nil
+				},
+			})
+
+			return nil
+		}),
+	)
+}
