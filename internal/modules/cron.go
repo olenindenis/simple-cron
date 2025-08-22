@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"cron/internal/services"
@@ -38,11 +37,6 @@ func Module(moduleName, crontabName string) fx.Option {
 					}
 					if _, err = scheduler.AddFunc(job.Spec, func() {
 						log.Println(job.Command)
-
-						if strings.ContainsAny(job.Command, ";|&") {
-							log.Printf("Invalid input. Potential command injection detected. %s\n", job.Command)
-							return
-						}
 
 						cmd := exec.Command("sh", "-c", job.Command)
 						cmd.Stdout = os.Stdout
