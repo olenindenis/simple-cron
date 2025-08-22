@@ -39,11 +39,9 @@ func (c CrontabService) Parse() (domain.Job, error) {
 	}
 
 	res := strings.Split(string(data), " ")
-	spec := strings.Join(res[:5], " ")
-	command := res[5:]
 
 	return domain.Job{
-		Spec:    spec,
-		Command: command,
+		Spec:    strings.Join(res[:5], " "),
+		Command: strings.Join(res[5:], " "),
 	}, nil
 }

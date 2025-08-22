@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"cron/internal/services"
@@ -36,9 +36,12 @@ func Module(moduleName, crontabName string) fx.Option {
 						return err
 					}
 					if _, err = scheduler.AddFunc(job.Spec, func() {
-						log.Println(strings.Join(job.Command, " "))
+						log.Println(job.Command)
 
-						if err = exec.Command(job.Command[0], job.Command[1:]...).Run(); err != nil {
+						cmd := exec.Command("sh", "-c", fmt.Sprintf("\"%s\"", job.Command))
+						cmd.Stdout = os.Stdout
+						cmd.Stderr = os.Stderr
+						if err = cmd.Run(); err != nil {
 							log.Println(fmt.Errorf("run: %w", err))
 						}
 					}); err != nil {
