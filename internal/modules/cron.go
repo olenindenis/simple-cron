@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"time"
 
-	"cron/internal/services"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/fx"
+
+	"cron/internal/services"
 )
 
 func Module(moduleName, crontabName string) fx.Option {
@@ -39,12 +39,13 @@ func Module(moduleName, crontabName string) fx.Option {
 						log.Println(job.Command)
 
 						cmd := exec.Command("sh", "-c", job.Command)
-						cmd.Stdout = os.Stdout
-						cmd.Stderr = os.Stderr
-						if err = cmd.Run(); err != nil {
+						output, err := cmd.CombinedOutput()
+						if err != nil {
 							log.Println(fmt.Errorf("run: %w", err))
 							return
 						}
+
+						log.Printf("cmd output: %s", string(output))
 					}); err != nil {
 						return fmt.Errorf("cron AddFunc %w", err)
 					}

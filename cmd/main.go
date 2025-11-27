@@ -5,9 +5,10 @@ import (
 	"log"
 	"os"
 
-	"cron/internal/modules"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/fx"
+
+	"cron/internal/modules"
 )
 
 const moduleName = "cron"
