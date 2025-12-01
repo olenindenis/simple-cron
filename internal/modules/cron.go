@@ -35,18 +35,26 @@ func Module(moduleName, crontabName string) fx.Option {
 					if err != nil {
 						return err
 					}
-					if _, err = scheduler.AddFunc(job.Spec, func() {
+
+					if entryID, err := scheduler.AddFunc(job.Spec, func() {
 						log.Println(job.Command)
 
 						cmd := exec.Command("sh", "-c", job.Command)
 						output, err := cmd.CombinedOutput()
 						if err != nil {
 							log.Println(fmt.Errorf("run: %w", err))
+
+							if err = cmd.Cancel(); err != nil {
+								log.Println(fmt.Errorf("run: %w", err))
+							}
+
 							return
 						}
 
 						log.Printf("cmd output: %s", string(output))
 					}); err != nil {
+						scheduler.Remove(entryID)
+
 						return fmt.Errorf("cron AddFunc %w", err)
 					}
 
