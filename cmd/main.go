@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"go.uber.org/fx"
 
 	"cron/internal/modules"
@@ -14,24 +15,26 @@ import (
 const moduleName = "cron"
 
 func main() {
-	app := &cli.App{
+	ctx := context.Background()
+
+	app := &cli.Command{
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "file",
 				Usage: "crontab config file",
 			},
 		},
-		Action: func(cCtx *cli.Context) error {
-			if cCtx.String("file") == "" {
+		Action: func(cCtx context.Context, cmd *cli.Command) error {
+			if cmd.String("file") == "" {
 				return errors.New("file is required")
 			}
 
-			log.Printf("Run with crontab name: %q\n", cCtx.String("file"))
+			log.Printf("Run with crontab name: %q\n", cmd.String("file"))
 
 			fx.New(
 				modules.Module(
 					moduleName,
-					cCtx.String("file"),
+					cmd.String("file"),
 				),
 			).Run()
 
@@ -39,7 +42,7 @@ func main() {
 		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(ctx, os.Args); err != nil {
 		log.Fatal(err)
 	}
 }
