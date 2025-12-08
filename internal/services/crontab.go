@@ -10,11 +10,13 @@ import (
 	"cron/internal/domain"
 )
 
+type CrontabFileName string
+
 type CrontabService struct {
-	crontabFile string
+	crontabFile CrontabFileName
 }
 
-func NewCrontabService(crontabFile string) CrontabService {
+func NewCrontabService(crontabFile CrontabFileName) CrontabService {
 	return CrontabService{
 		crontabFile: crontabFile,
 	}
@@ -23,7 +25,7 @@ func NewCrontabService(crontabFile string) CrontabService {
 func (c CrontabService) Parse() (domain.Job, error) {
 	log.Printf("Parse %s file\n", c.crontabFile)
 
-	f, err := os.Open(c.crontabFile)
+	f, err := os.Open(string(c.crontabFile))
 	if err != nil {
 		return domain.Job{}, fmt.Errorf("os.Open %w", err)
 	}

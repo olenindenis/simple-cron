@@ -20,21 +20,30 @@ func main() {
 	app := &cli.Command{
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "file",
-				Usage: "crontab config file",
+				Name:    "crontab",
+				Aliases: []string{"c"},
+				Usage:   "crontab config file",
+			},
+			&cli.StringFlag{
+				Name:        "fork",
+				Aliases:     []string{"f"},
+				Usage:       "process fork type (one of [\"system\", \"own\")",
+				Value:       "system",
+				DefaultText: "random",
 			},
 		},
 		Action: func(cCtx context.Context, cmd *cli.Command) error {
-			if cmd.String("file") == "" {
+			if cmd.String("crontab") == "" {
 				return errors.New("file is required")
 			}
 
-			log.Printf("Run with crontab name: %q\n", cmd.String("file"))
+			log.Printf("Run with crontab name: %q\n", cmd.String("crontab"))
 
 			fx.New(
 				modules.Module(
 					moduleName,
-					cmd.String("file"),
+					cmd.String("crontab"),
+					cmd.String("fork"),
 				),
 			).Run()
 

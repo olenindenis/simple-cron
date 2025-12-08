@@ -2,3 +2,5 @@
 cron
 dist/
 vendor/
+main
+.todo
