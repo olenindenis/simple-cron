@@ -29,7 +29,7 @@ func main() {
 				Aliases:     []string{"f"},
 				Usage:       "process fork type (one of [\"system\", \"own\")",
 				Value:       "system",
-				DefaultText: "random",
+				DefaultText: "system",
 			},
 		},
 		Action: func(cCtx context.Context, cmd *cli.Command) error {
