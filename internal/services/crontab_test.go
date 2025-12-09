@@ -12,7 +12,7 @@ func TestCrontabServiceParse(t *testing.T) {
 	}
 
 	expectedSpec := "* * * * *"
-	expectedCommand := "php /var/www/html/crm/artisan schedule:run >> /dev/null 2>&1"
+	expectedCommand := "php artisan schedule:run >> /dev/null 2>&1"
 
 	if job.Command != expectedCommand {
 		t.Errorf(`Parse %v`, job.Command)
