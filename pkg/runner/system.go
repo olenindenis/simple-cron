@@ -22,7 +22,7 @@ func (r *System) Exec(_ context.Context, command string) error {
 	args := strings.Split(command, " ")
 
 	env := os.Environ()
-	execErr := syscall.Exec(args[0], args[1:], env)
+	execErr := syscall.Exec(args[0], []string{strings.Join(args[1:], " ")}, env)
 	if execErr != nil {
 		return fmt.Errorf("system exec error: %s", execErr)
 	}

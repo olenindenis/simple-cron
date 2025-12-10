@@ -24,7 +24,7 @@ func (fork *Fork) Exec(ctx context.Context, command string) error {
 	}
 
 	args := strings.Split(command, " ")
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], strings.Join(args[1:], " "))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = filepath.Dir(ex)
