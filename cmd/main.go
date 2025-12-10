@@ -28,8 +28,8 @@ func main() {
 				Name:        "fork",
 				Aliases:     []string{"f"},
 				Usage:       "process fork type (one of [\"system\", \"own\")",
-				Value:       "system",
-				DefaultText: "system",
+				Value:       "own",
+				DefaultText: "own",
 			},
 		},
 		Action: func(cCtx context.Context, cmd *cli.Command) error {

@@ -7,7 +7,7 @@ to get help
 
 use:
 ```
-./main -file=some_file_name
+./main --crontab=some_file_name --fork=own
 ```
 to set crontab file
 
