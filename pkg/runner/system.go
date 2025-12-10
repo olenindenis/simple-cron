@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -18,9 +19,10 @@ func NewSystem() *System {
 func (r *System) Exec(_ context.Context, command string) error {
 	log.Println(command)
 
-	var args []string
+	args := strings.Split(command, " ")
+
 	env := os.Environ()
-	execErr := syscall.Exec(command, args, env)
+	execErr := syscall.Exec(args[0], args[1:], env)
 	if execErr != nil {
 		return fmt.Errorf("system exec error: %s", execErr)
 	}

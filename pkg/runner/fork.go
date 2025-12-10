@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -22,7 +23,8 @@ func (fork *Fork) Exec(ctx context.Context, command string) error {
 		return fmt.Errorf("executing fork: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, command)
+	args := strings.Split(command, " ")
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = filepath.Dir(ex)
