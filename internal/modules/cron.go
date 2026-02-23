@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/fx"
@@ -62,10 +61,12 @@ func Module(moduleName, crontabName, forkType string) fx.Option {
 				OnStop: func(ctx context.Context) error {
 					log.Println("Stop all jobs")
 
-					_, shutdownRelease := context.WithTimeout(ctx, 30*time.Second)
-					defer shutdownRelease()
-
-					scheduler.Stop()
+					stopCtx := scheduler.Stop()
+					select {
+					case <-stopCtx.Done():
+					case <-ctx.Done():
+						log.Println("Shutdown timeout exceeded, forcing stop")
+					}
 
 					return nil
 				},

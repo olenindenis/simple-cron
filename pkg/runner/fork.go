@@ -3,10 +3,12 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -22,13 +24,29 @@ func (fork *Fork) Exec(ctx context.Context, command string) error {
 		return fmt.Errorf("executing fork: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	discard := false
+	if strings.Contains(command, ">>") {
+		command = strings.TrimRight(strings.Split(command, ">>")[0], " ")
+		discard = true
+	}
+
+	args := strings.Split(command, " ")
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	if discard {
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+	}
+
 	cmd.Dir = filepath.Dir(ex)
 	cmd.Env = append(os.Environ())
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
+	}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 
 	log.Printf("Exec command: %s in path: %s\n", command, cmd.Dir)
