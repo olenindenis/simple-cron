@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/fx"
@@ -12,7 +13,21 @@ import (
 	"cron/pkg/runner"
 )
 
-func Module(moduleName, crontabName, forkType string) fx.Option {
+// jobTimeout bounds how long a single job invocation may run before it is
+// killed (SIGTERM to the process group, see pkg/runner/fork.go). Without it,
+// a hanging job command blocks its goroutine and OS thread forever, and
+// combined with SkipIfStillRunning below, ticks would otherwise never
+// recover from a stuck job.
+type jobTimeout time.Duration
+
+func newScheduler() *cron.Cron {
+	return cron.New(cron.WithChain(
+		cron.Recover(cron.DefaultLogger),
+		cron.SkipIfStillRunning(cron.DefaultLogger),
+	))
+}
+
+func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.Option {
 	return fx.Module(moduleName,
 		fx.Provide(
 			func() services.CrontabFileName {
@@ -21,10 +36,13 @@ func Module(moduleName, crontabName, forkType string) fx.Option {
 			func() runner.ForkType {
 				return runner.ForkType(forkType)
 			},
+			func() jobTimeout {
+				return jobTimeout(timeout)
+			},
 
 			fx.Annotate(context.Background, fx.As(new(context.Context))),
 			services.NewCrontabService,
-			cron.New,
+			newScheduler,
 		),
 		fx.Invoke(func(
 			ctx context.Context,
@@ -32,6 +50,7 @@ func Module(moduleName, crontabName, forkType string) fx.Option {
 			service services.CrontabService,
 			scheduler *cron.Cron,
 			forkType runner.ForkType,
+			timeout jobTimeout,
 		) error {
 			cmd := runner.NewFactory(forkType).MustMake()
 
@@ -45,7 +64,10 @@ func Module(moduleName, crontabName, forkType string) fx.Option {
 					}
 
 					if entryID, err := scheduler.AddFunc(job.Spec, func() {
-						if err = cmd.Exec(ctx, job.Command); err != nil {
+						jobCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout))
+						defer cancel()
+
+						if err = cmd.Exec(jobCtx, job.Command); err != nil {
 							log.Println(err)
 						}
 					}); err != nil {

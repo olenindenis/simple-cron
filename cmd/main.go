@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"time"
 
 	"github.com/urfave/cli/v3"
 	"go.uber.org/fx"
@@ -31,6 +32,13 @@ func main() {
 				Value:       "own",
 				DefaultText: "own",
 			},
+			&cli.DurationFlag{
+				Name:        "timeout",
+				Aliases:     []string{"t"},
+				Usage:       "max duration a single job run may take before it is killed",
+				Value:       5 * time.Minute,
+				DefaultText: "5m",
+			},
 		},
 		Action: func(cCtx context.Context, cmd *cli.Command) error {
 			if cmd.String("crontab") == "" {
@@ -44,6 +52,7 @@ func main() {
 					moduleName,
 					cmd.String("crontab"),
 					cmd.String("fork"),
+					cmd.Duration("timeout"),
 				),
 			).Run()
 
