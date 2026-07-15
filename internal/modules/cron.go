@@ -3,13 +3,14 @@ package modules
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/fx"
 
 	"cron/internal/services"
+	"cron/pkg/logging"
 	"cron/pkg/runner"
 )
 
@@ -20,16 +21,12 @@ import (
 // recover from a stuck job.
 type jobTimeout time.Duration
 
-func newScheduler() *cron.Cron {
-	return cron.New(cron.WithChain(
-		cron.Recover(cron.DefaultLogger),
-		cron.SkipIfStillRunning(cron.DefaultLogger),
-	))
-}
-
 func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.Option {
 	return fx.Module(moduleName,
 		fx.Provide(
+			func() *slog.Logger {
+				return slog.Default().With("application", moduleName)
+			},
 			func() services.CrontabFileName {
 				return services.CrontabFileName(crontabName)
 			},
@@ -42,7 +39,14 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 
 			fx.Annotate(context.Background, fx.As(new(context.Context))),
 			services.NewCrontabService,
-			newScheduler,
+			func() *cron.Cron {
+				cronLogger := logging.NewCronLogger(slog.Default().With("component", "robfig-cron"))
+
+				return cron.New(cron.WithChain(
+					cron.Recover(cronLogger),
+					cron.SkipIfStillRunning(cronLogger),
+				))
+			},
 		),
 		fx.Invoke(func(
 			ctx context.Context,
@@ -51,43 +55,60 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 			scheduler *cron.Cron,
 			forkType runner.ForkType,
 			timeout jobTimeout,
+			logger *slog.Logger,
 		) error {
 			cmd := runner.NewFactory(forkType).MustMake()
 
 			lifecycle.Append(fx.Hook{
 				OnStart: func(_ context.Context) error {
-					log.Println("Start jobs")
+					logger.Info("starting scheduler")
 
 					job, err := service.Parse()
 					if err != nil {
+						logger.Error("failed to parse crontab", "error", err)
+
 						return fmt.Errorf("parse crontab: %w", err)
 					}
 
-					if entryID, err := scheduler.AddFunc(job.Spec, func() {
+					logger.Info("crontab job parsed", "spec", job.Spec, "command", job.Command)
+
+					entryID, err := scheduler.AddFunc(job.Spec, func() {
+						jobLogger := logger.With("spec", job.Spec, "command", job.Command)
 						jobCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout))
 						defer cancel()
 
-						if err = cmd.Exec(jobCtx, job.Command); err != nil {
-							log.Println(err)
+						jobLogger.Info("job execution triggered")
+						start := time.Now()
+
+						if err := cmd.Exec(jobCtx, job.Command); err != nil {
+							jobLogger.Error("job execution failed", "duration", time.Since(start), "error", err)
+
+							return
 						}
-					}); err != nil {
+
+						jobLogger.Info("job execution completed", "duration", time.Since(start))
+					})
+					if err != nil {
 						scheduler.Remove(entryID)
+						logger.Error("failed to register cron job", "spec", job.Spec, "error", err)
 
 						return fmt.Errorf("cron AddJob %w", err)
 					}
 
 					scheduler.Start()
+					logger.Info("scheduler started", "entry_id", entryID)
 
 					return nil
 				},
 				OnStop: func(ctx context.Context) error {
-					log.Println("Stop all jobs")
+					logger.Info("stopping scheduler")
 
 					stopCtx := scheduler.Stop()
 					select {
 					case <-stopCtx.Done():
+						logger.Info("scheduler stopped")
 					case <-ctx.Done():
-						log.Println("Shutdown timeout exceeded, forcing stop")
+						logger.Warn("shutdown timeout exceeded, forcing stop")
 					}
 
 					return nil

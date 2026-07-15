@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -16,6 +16,10 @@ import (
 const moduleName = "cron"
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	ctx := context.Background()
 
 	app := &cli.Command{
@@ -45,7 +49,11 @@ func main() {
 				return errors.New("file is required")
 			}
 
-			log.Printf("Run with crontab name: %q\n", cmd.String("crontab"))
+			slog.Info("starting cron daemon",
+				"crontab", cmd.String("crontab"),
+				"fork", cmd.String("fork"),
+				"timeout", cmd.Duration("timeout"),
+			)
 
 			fx.New(
 				modules.Module(
@@ -61,6 +69,7 @@ func main() {
 	}
 
 	if err := app.Run(ctx, os.Args); err != nil {
-		log.Fatal(err)
+		slog.Error("cron daemon exited with error", "error", err)
+		os.Exit(1)
 	}
 }
