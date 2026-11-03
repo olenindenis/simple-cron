@@ -29,19 +29,11 @@ func main() {
 				Aliases: []string{"c"},
 				Usage:   "crontab config file",
 			},
-			&cli.StringFlag{
-				Name:        "fork",
-				Aliases:     []string{"f"},
-				Usage:       "process fork type (one of [\"system\", \"own\")",
-				Value:       "own",
-				DefaultText: "own",
-			},
 			&cli.DurationFlag{
-				Name:        "timeout",
-				Aliases:     []string{"t"},
-				Usage:       "max duration a single job run may take before it is killed",
-				Value:       5 * time.Minute,
-				DefaultText: "5m",
+				Name:    "timeout",
+				Aliases: []string{"t"},
+				Usage:   "max duration a single job run may take before it is killed",
+				Value:   5 * time.Minute,
 			},
 		},
 		Action: func(cCtx context.Context, cmd *cli.Command) error {
@@ -51,17 +43,11 @@ func main() {
 
 			slog.Info("starting cron daemon",
 				"crontab", cmd.String("crontab"),
-				"fork", cmd.String("fork"),
 				"timeout", cmd.Duration("timeout"),
 			)
 
 			fx.New(
-				modules.Module(
-					moduleName,
-					cmd.String("crontab"),
-					cmd.String("fork"),
-					cmd.Duration("timeout"),
-				),
+				modules.Module(moduleName, cmd.String("crontab"), cmd.Duration("timeout")),
 			).Run()
 
 			return nil

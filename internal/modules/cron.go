@@ -21,7 +21,7 @@ import (
 // recover from a stuck job.
 type jobTimeout time.Duration
 
-func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.Option {
+func Module(moduleName, crontabName string, timeout time.Duration) fx.Option {
 	return fx.Module(moduleName,
 		fx.Provide(
 			func() *slog.Logger {
@@ -29,9 +29,6 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 			},
 			func() services.CrontabFileName {
 				return services.CrontabFileName(crontabName)
-			},
-			func() runner.ForkType {
-				return runner.ForkType(forkType)
 			},
 			func() jobTimeout {
 				return jobTimeout(timeout)
@@ -53,11 +50,10 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 			lifecycle fx.Lifecycle,
 			service services.CrontabService,
 			scheduler *cron.Cron,
-			forkType runner.ForkType,
 			timeout jobTimeout,
 			logger *slog.Logger,
 		) error {
-			cmd := runner.NewFactory(forkType).MustMake()
+			cmd := runner.NewFork()
 
 			lifecycle.Append(fx.Hook{
 				OnStart: func(_ context.Context) error {
