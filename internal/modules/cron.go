@@ -14,50 +14,21 @@ import (
 	"cron/pkg/runner"
 )
 
-// jobTimeout bounds how long a single job invocation may run before it is
-// killed (SIGTERM to the process group, see pkg/runner/fork.go). Without it,
-// a hanging job command blocks its goroutine and OS thread forever, and
-// combined with SkipIfStillRunning below, ticks would otherwise never
-// recover from a stuck job.
-type jobTimeout time.Duration
-
-func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.Option {
+// Module wires the crontab parser, the scheduler and the job runner into the
+// fx lifecycle. timeout bounds how long a single job invocation may run before
+// it is killed (SIGTERM to the process group, see pkg/runner/fork.go); combined
+// with SkipIfStillRunning, a hanging job would otherwise block all later ticks.
+func Module(moduleName, crontabName string, timeout time.Duration) fx.Option {
 	return fx.Module(moduleName,
-		fx.Provide(
-			func() *slog.Logger {
-				return slog.Default().With("application", moduleName)
-			},
-			func() services.CrontabFileName {
-				return services.CrontabFileName(crontabName)
-			},
-			func() runner.ForkType {
-				return runner.ForkType(forkType)
-			},
-			func() jobTimeout {
-				return jobTimeout(timeout)
-			},
-
-			fx.Annotate(context.Background, fx.As(new(context.Context))),
-			services.NewCrontabService,
-			func() *cron.Cron {
-				cronLogger := logging.NewCronLogger(slog.Default().With("component", "robfig-cron"))
-
-				return cron.New(cron.WithChain(
-					cron.Recover(cronLogger),
-					cron.SkipIfStillRunning(cronLogger),
-				))
-			},
-		),
-		fx.Invoke(func(
-			ctx context.Context,
-			lifecycle fx.Lifecycle,
-			service services.CrontabService,
-			scheduler *cron.Cron,
-			forkType runner.ForkType,
-			timeout jobTimeout,
-			logger *slog.Logger,
-		) error {
-			cmd := runner.NewFactory(forkType).MustMake()
+		fx.Invoke(func(lifecycle fx.Lifecycle) {
+			logger := slog.Default().With("application", moduleName)
+			service := services.NewCrontabService(crontabName)
+			cronLogger := logging.NewCronLogger(slog.Default().With("component", "robfig-cron"))
+			scheduler := cron.New(cron.WithChain(
+				cron.Recover(cronLogger),
+				cron.SkipIfStillRunning(cronLogger),
+			))
+			fork := runner.NewFork()
 
 			lifecycle.Append(fx.Hook{
 				OnStart: func(_ context.Context) error {
@@ -65,8 +36,6 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 
 					job, err := service.Parse()
 					if err != nil {
-						logger.Error("failed to parse crontab", "error", err)
-
 						return fmt.Errorf("parse crontab: %w", err)
 					}
 
@@ -74,13 +43,13 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 
 					entryID, err := scheduler.AddFunc(job.Spec, func() {
 						jobLogger := logger.With("spec", job.Spec, "command", job.Command)
-						jobCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout))
+						jobCtx, cancel := context.WithTimeout(context.Background(), timeout)
 						defer cancel()
 
 						jobLogger.Info("job execution triggered")
 						start := time.Now()
 
-						if err := cmd.Exec(jobCtx, job.Command); err != nil {
+						if err := fork.Exec(jobCtx, job.Command); err != nil {
 							jobLogger.Error("job execution failed", "duration", time.Since(start), "error", err)
 
 							return
@@ -89,10 +58,7 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 						jobLogger.Info("job execution completed", "duration", time.Since(start))
 					})
 					if err != nil {
-						scheduler.Remove(entryID)
-						logger.Error("failed to register cron job", "spec", job.Spec, "error", err)
-
-						return fmt.Errorf("cron AddJob %w", err)
+						return fmt.Errorf("add cron job %q: %w", job.Spec, err)
 					}
 
 					scheduler.Start()
@@ -114,8 +80,6 @@ func Module(moduleName, crontabName, forkType string, timeout time.Duration) fx.
 					return nil
 				},
 			})
-
-			return nil
 		}),
 	)
 }

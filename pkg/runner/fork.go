@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type Fork struct {
@@ -24,9 +23,7 @@ func NewFork() *Fork {
 func (fork *Fork) Exec(ctx context.Context, command string) error {
 	ex, err := os.Executable()
 	if err != nil {
-		fork.logger.Error("failed to resolve own executable path", "error", err)
-
-		return fmt.Errorf("executing fork: %w", err)
+		return fmt.Errorf("resolve own executable path: %w", err)
 	}
 
 	discard := false
@@ -37,16 +34,15 @@ func (fork *Fork) Exec(ctx context.Context, command string) error {
 
 	args := strings.Split(command, " ")
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	if discard {
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
 
 	cmd.Dir = filepath.Dir(ex)
-	cmd.Env = os.Environ()
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
@@ -56,26 +52,15 @@ func (fork *Fork) Exec(ctx context.Context, command string) error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 
-	logger := fork.logger.With("command", command, "dir", cmd.Dir, "discard_output", discard)
-	logger.Info("starting job process")
-
-	start := time.Now()
-
 	if err = cmd.Start(); err != nil {
-		logger.Error("failed to start job process", "error", err)
-
 		return fmt.Errorf("start error: %w", err)
 	}
 
-	logger.Info("job process started", "pid", cmd.Process.Pid)
+	fork.logger.Info("job process started", "command", command, "dir", cmd.Dir, "discard_output", discard, "pid", cmd.Process.Pid)
 
 	if err = cmd.Wait(); err != nil {
-		logger.Error("job process exited with error", "pid", cmd.Process.Pid, "duration", time.Since(start), "error", err)
-
-		return fmt.Errorf("wait error: %w", err)
+		return fmt.Errorf("wait error (pid %d): %w", cmd.Process.Pid, err)
 	}
-
-	logger.Info("job process finished", "pid", cmd.Process.Pid, "duration", time.Since(start))
 
 	return nil
 }

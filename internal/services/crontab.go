@@ -1,59 +1,46 @@
 package services
 
 import (
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
-
-	"cron/internal/domain"
 )
 
-type CrontabFileName string
+type Job struct {
+	Spec    string
+	Command string
+}
 
 type CrontabService struct {
-	crontabFile CrontabFileName
-	logger      *slog.Logger
+	path   string
+	logger *slog.Logger
 }
 
-func NewCrontabService(crontabFile CrontabFileName) CrontabService {
+func NewCrontabService(path string) CrontabService {
 	return CrontabService{
-		crontabFile: crontabFile,
-		logger:      slog.Default().With("component", "crontab_service"),
+		path:   path,
+		logger: slog.Default().With("component", "crontab_service"),
 	}
 }
 
-func (c CrontabService) Parse() (domain.Job, error) {
-	c.logger.Info("parsing crontab file", "file", string(c.crontabFile))
+// Parse reads a single crontab line: five schedule fields followed by the command.
+func (c CrontabService) Parse() (Job, error) {
+	c.logger.Info("parsing crontab file", "file", c.path)
 
-	f, err := os.Open(string(c.crontabFile))
+	data, err := os.ReadFile(c.path)
 	if err != nil {
-		c.logger.Error("failed to open crontab file", "file", string(c.crontabFile), "error", err)
-
-		return domain.Job{}, fmt.Errorf("os.Open %w", err)
-	}
-	defer func(f *os.File) {
-		if err = f.Close(); err != nil {
-			panic(fmt.Errorf("f.Close %w", err))
-		}
-	}(f)
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		c.logger.Error("failed to read crontab file", "file", string(c.crontabFile), "error", err)
-
-		return domain.Job{}, fmt.Errorf("io.ReadAll %w", err)
+		return Job{}, fmt.Errorf("read crontab file: %w", err)
 	}
 
-	res := strings.Split(string(data), " ")
+	res := strings.Split(strings.TrimSpace(string(data)), " ")
+	if len(res) < 6 {
+		return Job{}, errors.New("invalid crontab line: expected 5 schedule fields and a command")
+	}
 
-	job := domain.Job{
+	return Job{
 		Spec:    strings.Join(res[:5], " "),
 		Command: strings.Join(res[5:], " "),
-	}
-
-	c.logger.Info("crontab file parsed", "spec", job.Spec, "command", job.Command)
-
-	return job, nil
+	}, nil
 }
